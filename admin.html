@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Админ-панель Cerber</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #0f0f1a; color: #cdd6f4; padding: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #444; padding: 8px; text-align: left; }
+    th { background-color: #1e1e2e; }
+    tr:nth-child(even) { background-color: #1a1b26; }
+    button { background: #7f38ff; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 5px; }
+  </style>
+</head>
+<body>
+  <h1>🛡 Админ-панель Cerber</h1>
+  <p>Ниже отображаются все текущие сессии пользователей.</p>
+  <table id="session-table">
+    <thead>
+      <tr>
+        <th>Логин</th>
+        <th>IP</th>
+        <th>Город</th>
+        <th>OS</th>
+        <th>Устройство</th>
+        <th>Время входа</th>
+        <th>Действие</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <script>
+    const masterKey = "$2a$10$tE709wR44yqSPYBCOANfRO..H44sjCD/nr4ynV/a.bknWOjwsXaaC";
+    const sessionsBin = "684e07ef8a456b7966ae42c8";
+    const bansBin = "684e07fc8561e97a50246589";
+
+    async function fetchSessions() {
+      const res = await fetch(`https://api.jsonbin.io/v3/b/${sessionsBin}/latest`, {
+        headers: { "X-Master-Key": masterKey }
+      });
+      const data = await res.json();
+      return data.record;
+    }
+
+    async function renderTable() {
+      const sessions = await fetchSessions();
+      const tbody = document.querySelector("#session-table tbody");
+      tbody.innerHTML = "";
+
+      for (const user in sessions) {
+        for (const s of sessions[user]) {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${user}</td>
+            <td>${s.ip}</td>
+            <td>${s.city || "-"}</td>
+            <td>${s.os || "-"}</td>
+            <td>${s.hostname || "-"}</td>
+            <td>${new Date(s.time).toLocaleString()}</td>
+            <td><button onclick="ban('${user}', '${s.device_id}')">Забанить</button></td>
+          `;
+          tbody.appendChild(row);
+        }
+      }
+    }
+
+    async function ban(user, device_id) {
+      const res = await fetch(`https://api.jsonbin.io/v3/b/${bansBin}/latest`, {
+        headers: { "X-Master-Key": masterKey }
+      });
+      const bans = await res.json();
+
+      if (!bans.record.login.includes(user)) bans.record.login.push(user);
+      if (!bans.record.hwid.includes(device_id)) bans.record.hwid.push(device_id);
+
+      await fetch(`https://api.jsonbin.io/v3/b/${bansBin}`, {
+        method: "PUT",
+        headers: {
+          "X-Master-Key": masterKey,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(bans.record)
+      });
+
+      alert("Пользователь и HWID забанены.");
+      renderTable();
+    }
+
+    renderTable();
+  </script>
+</body>
+</html>
